@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation } from 'convex/react'
 import { useState } from 'react'
+import { useGlobalTypingIndicators } from './useGlobalTypingIndicators'
 import { api } from '../../convex/_generated/api'
 import Image from 'next/image'
 import { Search, Users, MessageCircle } from 'lucide-react'
@@ -18,6 +19,7 @@ export function Sidebar({ currentUserId, onSelectConversation }: SidebarProps) {
   const conversations = useQuery(api.conversations.getConversations, { userId: currentUserId as any })
   const createConversation = useMutation(api.conversations.createConversation)
   const markAsRead = useMutation(api.conversations.markAsRead)
+  const typingByConversation = useGlobalTypingIndicators(currentUserId)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'users' | 'conversations'>('users')
   const [creatingGroup, setCreatingGroup] = useState(false)
@@ -91,7 +93,7 @@ export function Sidebar({ currentUserId, onSelectConversation }: SidebarProps) {
               placeholder="Search users..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
             />
           </div>
         )}
@@ -142,7 +144,7 @@ export function Sidebar({ currentUserId, onSelectConversation }: SidebarProps) {
                     <input
                       type="checkbox"
                       checked={selectedUsers.includes(u._id)}
-                      onChange={() => {}} // Handled by onClick
+                      onChange={() => {}}
                       className="mr-2"
                     />
                   )}
@@ -159,7 +161,7 @@ export function Sidebar({ currentUserId, onSelectConversation }: SidebarProps) {
                     )}
                   </div>
                   <div className="ml-3">
-                    <p className={`font-medium ${isDark ? 'text-gray-100' : ''}`}>{u.name}</p>
+                    <p className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{u.name}</p>
                     <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{u.isOnline ? 'Online' : 'Offline'}</p>
                   </div>
                 </div>
@@ -174,45 +176,72 @@ export function Sidebar({ currentUserId, onSelectConversation }: SidebarProps) {
         ) : (
           <>
             {conversations?.length ? (
-              conversations.map(c => (
-                <div
-                  key={c._id}
-                  className={`p-3 border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} cursor-pointer flex items-center`}
-                  onClick={() => onSelectConversation(c._id)}
-                >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
-                    <MessageCircle className={`w-5 h-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                  </div>
-                  <div className="flex-1">
-                    {c.isGroup ? (
-                      <>
-                        <p className={`font-medium ${isDark ? 'text-gray-100' : ''}`}>{c.name || 'Group Chat'}</p>
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {c.participants.length} members
-                        </p>
-                      </>
-                    ) : (
-                      (() => {
-                        const otherUserId = c.participants.find(p => p !== currentUserId)
-                        const otherUser = users?.find(u => u._id === otherUserId)
-                        return (
-                          <>
-                            <p className={`font-medium ${isDark ? 'text-gray-100' : ''}`}>{otherUser?.name || 'Unknown User'}</p>
-                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {c.lastMessageContent ? c.lastMessageContent.substring(0, 30) + (c.lastMessageContent.length > 30 ? '...' : '') : 'No messages yet'}
+              conversations.map(c => {
+                const typingUsers = (typingByConversation[c._id] || []).filter(u => u._id !== currentUserId)
+                const isTyping = typingUsers.length > 0
+
+                return (
+                  <div
+                    key={c._id}
+                    className={`p-3 border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} cursor-pointer flex items-center`}
+                    onClick={() => onSelectConversation(c._id)}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 flex-shrink-0 ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
+                      <MessageCircle className={`w-5 h-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {c.isGroup ? (
+                        <>
+                          <p className={`font-medium truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{c.name || 'Group Chat'}</p>
+                          {isTyping ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-500 text-xs font-medium truncate">
+                                {typingUsers.map(u => u.name).join(', ')} typing
+                              </span>
+                              <span className="typing-dot text-green-500 text-xs">•</span>
+                              <span className="typing-dot text-green-500 text-xs">•</span>
+                              <span className="typing-dot text-green-500 text-xs">•</span>
+                            </div>
+                          ) : (
+                            <p className={`text-sm truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {c.participants.length} members
                             </p>
-                          </>
-                        )
-                      })()
+                          )}
+                        </>
+                      ) : (
+                        (() => {
+                          const otherUserId = c.participants.find(p => p !== currentUserId)
+                          const otherUser = users?.find(u => u._id === otherUserId)
+                          return (
+                            <>
+                              <p className={`font-medium truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{otherUser?.name || 'Unknown User'}</p>
+                              {isTyping ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-green-500 text-xs font-medium">typing</span>
+                                  <span className="typing-dot text-green-500 text-xs">•</span>
+                                  <span className="typing-dot text-green-500 text-xs">•</span>
+                                  <span className="typing-dot text-green-500 text-xs">•</span>
+                                </div>
+                              ) : (
+                                <p className={`text-sm truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {c.lastMessageContent
+                                    ? c.lastMessageContent.substring(0, 30) + (c.lastMessageContent.length > 30 ? '...' : '')
+                                    : 'No messages yet'}
+                                </p>
+                              )}
+                            </>
+                          )
+                        })()
+                      )}
+                    </div>
+                    {c.unreadCount > 0 && (
+                      <div className="bg-red-500 text-white text-xs rounded-full px-2 py-1 ml-2 flex-shrink-0">
+                        {c.unreadCount}
+                      </div>
                     )}
                   </div>
-                  {c.unreadCount > 0 && (
-                    <div className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
-                      {c.unreadCount}
-                    </div>
-                  )}
-                </div>
-              ))
+                )
+              })
             ) : (
               <div className={`p-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 <MessageCircle className={`w-12 h-12 mx-auto mb-2 ${isDark ? 'text-gray-600' : 'text-gray-300'}`} />
